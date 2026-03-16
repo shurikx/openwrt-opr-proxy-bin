@@ -15,7 +15,6 @@ jobs:
       - name: Get Latest Version
         id: get_ver
         run: |
-          # Пытаемся взять версию из зеркала
           VER=$(curl -s https://api.github.com/repos/hirajanwin/opera-proxy/tags | grep '"name":' | head -n 1 | sed -E 's/.*"v([^"]+)".*/\1/' || echo "1.0.0")
           [ -z "$VER" ] && VER="1.0.0"
           echo "ver=$VER" >> $GITHUB_OUTPUT
@@ -74,16 +73,14 @@ jobs:
 
       - name: Prepare Package
         run: |
-          # Копируем структуру твоего пакета из репо в SDK
+          mkdir -p opera-proxy/files/usr/bin
+          cp opera-proxy-bin opera-proxy/files/usr/bin/opera-proxy
+          chmod +x opera-proxy/files/usr/bin/opera-proxy
+          
+          VER="${{ needs.check-version.outputs.ver }}"
+          [ -z "$VER" ] || [ "$VER" = "null" ] && VER="1.0.0"
+          sed -i "s/^PKG_VERSION:=.*$/PKG_VERSION:=$VER/" opera-proxy/Makefile
           cp -r opera-proxy sdk/package/
-          
-          # Создаем папку для бинарника и кладем туда наш файл
-          mkdir -p sdk/package/opera-proxy/files/usr/bin
-          cp opera-proxy-bin sdk/package/opera-proxy/files/usr/bin/opera-proxy
-          chmod +x sdk/package/opera-proxy/files/usr/bin/opera-proxy
-          
-          # Прописываем версию в Makefile
-          sed -i "s/^PKG_VERSION:=.*$/PKG_VERSION:=${{ needs.check-version.outputs.ver }}/" sdk/package/opera-proxy/Makefile
 
       - name: Compile APK
         run: |
@@ -92,10 +89,12 @@ jobs:
           ./scripts/feeds install -a
           echo "CONFIG_PACKAGE_opera-proxy=y" > .config
           make defconfig
-          # Собираем только наш пакет
           make package/opera-proxy/compile V=s IGNORE_ERRORS=m
+          
+          echo "=== Результат сборки ==="
+          find bin/packages/ -name "opera-proxy*.apk"
 
-      - name: Upload
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: opera-proxy-${{ matrix.arch }}
