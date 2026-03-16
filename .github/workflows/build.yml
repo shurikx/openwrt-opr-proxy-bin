@@ -1,4 +1,4 @@
-name: Build Opera Proxy APK (v25)
+name: Build Opera Proxy
 
 on:
   push:
@@ -37,10 +37,12 @@ jobs:
       matrix:
         include:
           - arch: "mipsle"
+            pkg_arch: "mipsel_24kc"
             goarch: "mipsle"
             gomips: "softfloat"
             sdk_url: "https://downloads.openwrt.org/releases/25.12.0/targets/ramips/mt7621/openwrt-sdk-25.12.0-ramips-mt7621_gcc-14.3.0_musl.Linux-x86_64.tar.zst"
           - arch: "arm64"
+            pkg_arch: "aarch64_cortex-a53"
             goarch: "arm64"
             gomips: ""
             sdk_url: "https://downloads.openwrt.org/releases/25.12.0/targets/mediatek/filogic/openwrt-sdk-25.12.0-mediatek-filogic_gcc-14.3.0_musl.Linux-x86_64.tar.zst"
@@ -83,40 +85,27 @@ jobs:
       - name: Compile APK
         run: |
           cd sdk
-          
-          # 1. Сначала генерируем базовый конфиг
           make oldconfig || make defconfig
-          
-          # 2. Регистрируем пакет в системе (обязательно!)
           ./scripts/feeds update base
           ./scripts/feeds install -a
-          
-          # 3. Принудительно включаем наш пакет
           echo "CONFIG_PACKAGE_opera-proxy=y" >> .config
-          
-          # 4. Применяем изменения (без терминала)
           make defconfig
-          
-          # 5. Собираем только наш пакет
           make package/opera-proxy/compile V=s
           
-          # 6. ПОИСК: Вытаскиваем результат
-          echo "=== Поиск собранного APK ==="
+          echo "=== Поиск и переименование APK ==="
           mkdir -p ../output-artifacts
-          # Ищем во всех подпапках bin/
-          find bin/ -name "opera-proxy*.apk" -exec cp {} ../output-artifacts/ \;
+          # Здесь мы добавляем pkg_arch в имя файла
+          find bin/ -name "opera-proxy*.apk" -exec cp {} ../output-artifacts/opera-proxy-${{ matrix.pkg_arch }}.apk \;
           
-          # Если пусто, выведем структуру для отладки
           if [ -z "$(ls -A ../output-artifacts/)" ]; then
-            echo "Файл не найден! Текущая структура bin/:"
-            find bin/ -maxdepth 4
+            echo "Файл не найден!"
             exit 1
           fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opera-proxy-${{ matrix.arch }}
+          name: opera-proxy-${{ matrix.pkg_arch }}
           path: output-artifacts/
           if-no-files-found: error
 
