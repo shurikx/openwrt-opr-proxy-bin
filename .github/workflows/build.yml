@@ -83,17 +83,35 @@ jobs:
       - name: Compile APK
         run: |
           cd sdk
-          make package/opera-proxy/clean
+          
+          # 1. Сначала генерируем базовый конфиг
+          make oldconfig || make defconfig
+          
+          # 2. Регистрируем пакет в системе (обязательно!)
           ./scripts/feeds update base
-          ./scripts/feeds install opera-proxy || true
-          echo "CONFIG_PACKAGE_opera-proxy=y" > .config
+          ./scripts/feeds install -a
+          
+          # 3. Принудительно включаем наш пакет
+          echo "CONFIG_PACKAGE_opera-proxy=y" >> .config
+          
+          # 4. Применяем изменения (без терминала)
           make defconfig
+          
+          # 5. Собираем только наш пакет
           make package/opera-proxy/compile V=s
           
+          # 6. ПОИСК: Вытаскиваем результат
           echo "=== Поиск собранного APK ==="
           mkdir -p ../output-artifacts
+          # Ищем во всех подпапках bin/
           find bin/ -name "opera-proxy*.apk" -exec cp {} ../output-artifacts/ \;
-          ls -R ../output-artifacts/
+          
+          # Если пусто, выведем структуру для отладки
+          if [ -z "$(ls -A ../output-artifacts/)" ]; then
+            echo "Файл не найден! Текущая структура bin/:"
+            find bin/ -maxdepth 4
+            exit 1
+          fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
