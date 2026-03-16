@@ -1,4 +1,4 @@
-name: Build Opera Proxy
+name: Build Opera Proxy APK (v25)
 
 on:
   push:
@@ -35,6 +35,7 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
+
   build-mt7621:
     needs: check-version
     if: needs.check-version.outputs.exists == 'false'
@@ -44,7 +45,8 @@ jobs:
 
       - name: Download SDK (MT7621)
         run: |
-          wget https://downloads.openwrt.org/releases/24.10.2/targets/ramips/mt7621/openwrt-sdk-24.10.2-ramips-mt7621_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+          # Ссылка на SDK 25.10 для mt7621
+          wget https://downloads.openwrt.org/releases/25.12.0/targets/ramips/mt7621/openwrt-sdk-25.12.0-ramips-mt7621_gcc-14.3.0_musl.Linux-x86_64.tar.zst
           mkdir sdk
           # Распаковываем с флагом --strip-components=1, чтобы убрать вложенную папку
           tar --use-compress-program=unzstd -xf *.tar.zst -C sdk --strip-components=1
@@ -56,9 +58,12 @@ jobs:
           chmod +x update.sh
           ./update.sh mipsle
 
-      - name: Build .ipk
+      - name: Build .apk
         run: |
           cd sdk
+          # В SDK 25 важно обновить фиды для корректной генерации индексов apk
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
           make defconfig
           make package/opera-proxy/compile V=s -j$(nproc)
 
@@ -66,7 +71,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: opera-proxy-mt7621
-          path: sdk/bin/packages/mipsel_24kc/base/opera-proxy_*.ipk
+          # Изменено расширение на .apk
+          path: sdk/bin/packages/mipsel_24kc/base/opera-proxy_*.apk
 
   build-arm64:
     needs: check-version
@@ -77,9 +83,9 @@ jobs:
 
       - name: Download SDK (ARM64)
         run: |
-          wget https://downloads.openwrt.org/releases/24.10.2/targets/mediatek/filogic/openwrt-sdk-24.10.2-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
+          # Ссылка на SDK 25.10 для mediatek/filogic
+          wget https://downloads.openwrt.org/releases/25.12.0/targets/mediatek/filogic/openwrt-sdk-25.12.0-mediatek-filogic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
           mkdir sdk
-          # Распаковываем с флагом --strip-components=1, чтобы убрать вложенную папку
           tar --use-compress-program=unzstd -xf *.tar.zst -C sdk --strip-components=1
 
       - name: Add opera-proxy package
@@ -89,9 +95,11 @@ jobs:
           chmod +x update.sh
           ./update.sh arm64
 
-      - name: Build .ipk
+      - name: Build .apk
         run: |
           cd sdk
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
           make defconfig
           make package/opera-proxy/compile V=s -j$(nproc)
 
@@ -99,7 +107,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: opera-proxy-arm64
-          path: sdk/bin/packages/aarch64_cortex-a53/base/opera-proxy_*.ipk
+          # Изменено расширение на .apk
+          path: sdk/bin/packages/aarch64_cortex-a53/base/opera-proxy_*.apk
 
   publish:
     needs: [check-version, build-mt7621, build-arm64]
@@ -111,18 +120,16 @@ jobs:
           path: artifacts
           
       - name: Extract Version
-        id: get_version
         run: |
-          # Выполняем ту же команду, что и в вашем скрипте
           VER=$(curl -fs -o /dev/null -w %{redirect_url} https://github.com/Snawoot/opera-proxy/releases/latest | cut -d '/' -f8 | sed 's/^v//')
           echo "VER=$VER" >> $GITHUB_ENV
-          echo "Определена версия: $VER"
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VER }}
-          name: "v${{ env.VER }}"
-          files: artifacts/**/*.ipk
+          name: "v${{ env.VER }} (OpenWrt 25.10)"
+          # Публикуем файлы с расширением .apk
+          files: artifacts/**/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
